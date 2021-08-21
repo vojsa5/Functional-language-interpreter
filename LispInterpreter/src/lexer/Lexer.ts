@@ -3,19 +3,39 @@ import {LexerToken} from "./LexerTokens";
 import {SECDArray} from "../parser/SECDArray";
 
 export class Lexer{
+    get isEvaluating(): boolean {
+        return this._isEvaluating;
+    }
+
+    set isEvaluating(value: boolean) {
+        this._isEvaluating = value;
+    }
+
     inputBuffer: String;
     lastChar: string;
     currVal: number;
     currIdentifier: string;
+    preprocessorStr: string;
+    _isEvaluating: boolean;
 
     constructor(input: string) {
         this.inputBuffer = input;
+        this.preprocessorStr = "";
+        this._isEvaluating = true;
+    }
+
+    resetPreprocessorStr(){
+        this.preprocessorStr = this.getCurrString();
+        if(this.lastChar)
+            this.preprocessorStr += this.lastChar;
     }
 
     private getNextChar(): string{
         if(this.inputBuffer) {
             const result = this.inputBuffer.charAt(0);
             this.inputBuffer = this.inputBuffer.substring(1);
+            if(!this._isEvaluating)
+                this.preprocessorStr += result;
             return result;
         }
         return null;
@@ -32,10 +52,8 @@ export class Lexer{
 
     private loadFirstChar(): string{
         let dataType = Lexer.getDataType(this.lastChar);
-        if(dataType == DataType.INVALID || dataType == DataType.WHITESPACE )
-            return this.loadNonWhitespace();
-        return this.lastChar;
-        //return Lexer.getDataType(this.lastChar) == ( DataType.INVALID | DataType.WHITESPACE ) ? this.loadNonWhitespace() : this.lastChar;
+        return (dataType == DataType.INVALID || dataType == DataType.WHITESPACE)
+            ? this.loadNonWhitespace() : this.lastChar;
     }
 
     private static getDataType(char: string): DataType{
@@ -60,6 +78,7 @@ export class Lexer{
             currDataType = Lexer.getDataType(currChar);
         }
         this.lastChar = currChar;
+        this.currIdentifier = result.toString();
         this.currVal = result;
         return LexerToken.Num;
     }
@@ -76,6 +95,12 @@ export class Lexer{
                 return LexerToken.lambda;
             case "begin":
                 return LexerToken.begin;
+            case "car":
+                return LexerToken.car;
+            case "cdr":
+                return LexerToken.cdr;
+            case "consp":
+                return LexerToken.consp;
             default:
                 return LexerToken.Iden;
         }
@@ -89,8 +114,8 @@ export class Lexer{
             currChar = this.getNextChar();
             currDataType = Lexer.getDataType(currChar);
         }
-        this.lastChar = currChar;
         this.currIdentifier = result;
+        this.lastChar = currChar;
         return Lexer.loadIdenToken(result);
     }
 
@@ -105,7 +130,6 @@ export class Lexer{
     }*/
 
     private loadSpecial(currChar: string): LexerToken{
-        this.currIdentifier = currChar;
         switch (currChar){
             case "+":
                 return LexerToken.plus;
@@ -160,7 +184,7 @@ export class Lexer{
         }
     }
 
-    private loadQuotedSECDList(): SECDArray{
+    private loadListAsSECDArray(): SECDArray{
         let res: SECDArray = new SECDArray();
         let currChar: string;
         while(true){
@@ -169,15 +193,36 @@ export class Lexer{
                 return; //TODO Lexer Error
             switch(currChar){
                 case "(":
-                    res.push(this.loadQuotedSECDList());
+                    res.push(this.loadListAsSECDArray());
                     break;
                 case ")":
+                    this.lastChar = null;
                     return res;
                 default:
                     res.push(this.loadQuotedElement(currChar));
             }
         }
     }
+/*
+    public loadListAsString(): string{
+        let res: string = "";
+        let currChar: string;
+        let arrCnt = 0;
+        while(true){
+            currChar = this.loadFirstChar();
+            if(!currChar)
+                return; //TODO Lexer Error
+            res += currChar;
+            switch(currChar){
+                case "(":
+                    arrCnt ++;
+                    break;
+                case ")":
+                    if((-- arrCnt) == 0)
+                        return res;
+            }
+        }
+    }*/
 
     private loadQuotedElement(currChar: string): string{
         this.lastChar = currChar;
@@ -195,12 +240,13 @@ export class Lexer{
 
     public loadQuotedValue(): SECDArray{
         let currChar = this.loadFirstChar();
+        this.lastChar = null;
         if(currChar != "(") {
             let res: SECDArray = new SECDArray();
             res.push(this.loadQuotedElement(currChar));
             return res;
         }
-        return this.loadQuotedSECDList();
+        return this.loadListAsSECDArray();
     }
 
     public getNextToken(): LexerToken | null{
@@ -209,6 +255,7 @@ export class Lexer{
         this.lastChar = null;
         if(!currChar)
             return null;
+        this.currIdentifier = currChar;
         currDataType = Lexer.getDataType(currChar);
         switch(currDataType){
             case DataType.NUMBER:
@@ -230,4 +277,11 @@ export class Lexer{
         return this.currIdentifier;
     }
 
+    public getPreprocessorString(): string{
+        let res = this.preprocessorStr;
+        this.preprocessorStr = "";
+        if(this.lastChar)
+            res += this.lastChar;
+        return res;
+    }
 }

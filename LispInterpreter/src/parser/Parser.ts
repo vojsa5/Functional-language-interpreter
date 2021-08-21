@@ -4,20 +4,29 @@ import {Instruction} from "../instructions/Instructions";
 import {SymbTable} from "./SymbTable";
 import {SECDArray} from "./SECDArray";
 
-
 export class Parser{
+    symbTable: SymbTable;
     lexer: Lexer;
     currTok: LexerToken;
-    symbTable: SymbTable;
 
     constructor() {
         this.symbTable = new SymbTable([]);
     }
 
-    compare(tok: LexerToken){
+    protected compare(tok: LexerToken){
         if(this.currTok == tok)
             this.currTok = this.lexer.getNextToken();
         //else ParserError
+    }
+    
+    protected push(arr: SECDArray, val: string | number | SECDArray): number{
+        if(!val)
+            return -2;
+        return this.isEvaluating() ? arr.push(val) : -1;
+    }
+    
+    protected isEvaluating(): boolean{
+        return this.lexer.isEvaluating;
     }
 
     parse(input: string): SECDArray{
@@ -25,15 +34,15 @@ export class Parser{
         return this.loadInstructions();
     }
 
-    loadInstructions(): SECDArray {
+    protected loadInstructions(): SECDArray {
         this.currTok = this.lexer.getNextToken();
         return this.topLevel();
     }
 
-    private topLevel(): SECDArray {
+    protected topLevel(): SECDArray {
         let res: SECDArray = new SECDArray();
         switch (this.currTok){
-            case LexerToken.define:
+            case LexerToken.define://TODO
                 this.compare(LexerToken.define)
                 this.compare(LexerToken.leftBracket);
                 this.iden();
@@ -41,7 +50,7 @@ export class Parser{
                 this.compare(LexerToken.rightBracket);
                 this.expr();
                 break;
-            case LexerToken.defBasicMacro:
+            case LexerToken.defBasicMacro://TODO
                 this.compare(LexerToken.defBasicMacro);
                 this.compare(LexerToken.leftBracket);
                 this.iden();
@@ -49,7 +58,7 @@ export class Parser{
                 this.compare(LexerToken.rightBracket);
                 this.expr();
                 break;
-            case LexerToken.defHygMacro:
+            case LexerToken.defHygMacro://TODO
                 this.compare(LexerToken.defHygMacro);
                 this.compare(LexerToken.leftBracket);
                 this.iden();
@@ -57,14 +66,14 @@ export class Parser{
                 this.compare(LexerToken.rightBracket);
                 this.expr();
                 break;
-            case LexerToken.struct:
+            case LexerToken.struct://TODO
                 this.compare(LexerToken.struct);
                 this.compare(LexerToken.leftBracket);
                 this.iden();
                 this.args();
                 this.compare(LexerToken.rightBracket);
                 break;
-            case LexerToken.let://TODO some can probably be deleted
+            case LexerToken.let://TODO some can maybe be deleted
             case LexerToken.letrec:
             case LexerToken.lambda:
             case LexerToken.if:
@@ -94,13 +103,19 @@ export class Parser{
         return res;
     }
 
-    private expr(): SECDArray {
+    protected expr(): SECDArray {
         let res: SECDArray = new SECDArray();
         switch (this.currTok) {
             case LexerToken.leftBracket:
                 this.compare(LexerToken.leftBracket);
                 res = this.expr_body();
                 this.compare(LexerToken.rightBracket);
+                break;
+            case LexerToken.backQuote:
+                res = this.compileBackQuote();
+                break;
+            case LexerToken.comma:
+                res = this.compileComma();
                 break;
             case LexerToken.Str:
             case LexerToken.Num:
@@ -113,7 +128,7 @@ export class Parser{
         return res;
     }
 
-    private expr_body(): SECDArray {
+    protected expr_body(): SECDArray {
         let res: SECDArray = new SECDArray();
         let innerArr: SECDArray;
         let args: string[];
@@ -124,21 +139,21 @@ export class Parser{
                 this.compare(LexerToken.leftBracket);
                 innerRes = this.letBody();
                 res = res.concat(innerRes[1]);
-                res.push(Instruction[Instruction.CONS]);
+                this.push(res, Instruction[Instruction.CONS]);
                 this.compare(LexerToken.rightBracket);
-                res.push(this.lambda(innerRes[0]));
-                res.push(Instruction[Instruction.AP]);
+                this.push(res, this.lambda(innerRes[0]));
+                this.push(res, Instruction[Instruction.AP]);
                 break;
             case LexerToken.letrec:
                 this.compare(LexerToken.letrec);
                 this.compare(LexerToken.leftBracket);
-                res.push(Instruction[Instruction.DUM]);
+                this.push(res, Instruction[Instruction.DUM]);
                 innerRes = this.letBody();
                 res = res.concat(innerRes[1]);
-                res.push(Instruction[Instruction.CONS]);
+                this.push(res, Instruction[Instruction.CONS]);
                 this.compare(LexerToken.rightBracket);
-                res.push(this.lambda(innerRes[0]));
-                res.push(Instruction[Instruction.RAP]);
+                this.push(res, this.lambda(innerRes[0]));
+                this.push(res, Instruction[Instruction.RAP]);
                 break;
             case LexerToken.lambda:
                 this.compare(LexerToken.lambda);
@@ -150,111 +165,92 @@ export class Parser{
             case LexerToken.if:
                 this.compare(LexerToken.if);
                 res = this.expr();
-                res.push(Instruction[Instruction.SEL]);
+                this.push(res, Instruction[Instruction.SEL]);
                 innerArr = this.expr();
                 innerArr.push(Instruction[Instruction.JOIN]);
-                res.push(innerArr);
+                this.push(res, innerArr);
                 innerArr = this.expr();
                 innerArr.push(Instruction[Instruction.JOIN]);
-                res.push(innerArr);
+                this.push(res, innerArr);
                 break;
             case LexerToken.begin:
                 this.compare(LexerToken.begin);
                 res = this.beginBody();
                 break;
-            case LexerToken.printf:
+            case LexerToken.printf://TODO
                 this.compare(LexerToken.printf);
                 this.compare(LexerToken.Str);
                 this.args();
                 break;
             case LexerToken.plus:
                 this.compare(LexerToken.plus);
-                res = this.expr();
-                res = this.expr().concat(res);
-                res.push(Instruction[Instruction.ADD]);
+                res = this.compileBinaryOperator();
+                this.push(res, Instruction[Instruction.ADD]);
                 break;
             case LexerToken.minus:
                 this.compare(LexerToken.minus);
-                res = this.expr();
-                res = this.expr().concat(res);
-                res.push(Instruction[Instruction.SUB]);
+                res = this.compileBinaryOperator();
+                this.push(res, Instruction[Instruction.SUB]);
                 break;
             case LexerToken.times:
                 this.compare(LexerToken.times);
-                res = this.expr();
-                res = this.expr().concat(res);
-                res.push(Instruction[Instruction.MUL]);
+                res = this.compileBinaryOperator();
+                this.push(res, Instruction[Instruction.MUL]);
                 break;
             case LexerToken.division:
                 this.compare(LexerToken.division);
-                res = this.expr();
-                res = this.expr().concat(res);
-                res.push(Instruction[Instruction.DIV]);
+                res = this.compileBinaryOperator();
+                this.push(res, Instruction[Instruction.DIV]);
                 break;
             case LexerToken.lt:
                 this.compare(LexerToken.lt);
-                res = this.expr();
-                res = this.expr().concat(res);
-                res.push(Instruction[Instruction.LT]);
+                res = this.compileBinaryOperator();
+                this.push(res, Instruction[Instruction.LT]);
                 break;
             case LexerToken.le:
                 this.compare(LexerToken.le);
-                res = this.expr();
-                res = this.expr().concat(res);
-                res.push(Instruction[Instruction.LE]);
+                res = this.compileBinaryOperator();
+                this.push(res, Instruction[Instruction.LE]);
                 break;
             case LexerToken.eq:
                 this.compare(LexerToken.eq);
-                res = this.expr();
-                res = this.expr().concat(res);
-                res.push(Instruction[Instruction.EQ]);
+                res = this.compileBinaryOperator();
+                this.push(res, Instruction[Instruction.EQ]);
                 break;
             case LexerToken.he:
                 this.compare(LexerToken.he);
-                res = this.expr();
-                res = this.expr().concat(res);
-                res.push(Instruction[Instruction.HE]);
+                res = this.compileBinaryOperator();
+                this.push(res, Instruction[Instruction.HE]);
                 break;
             case LexerToken.ht:
                 this.compare(LexerToken.ht);
-                res = this.expr();
-                res = this.expr().concat(res);
-                res.push(Instruction[Instruction.HT]);
+                res = this.compileBinaryOperator();
+                this.push(res, Instruction[Instruction.HT]);
                 break;
             case LexerToken.or:
                 this.compare(LexerToken.or);
-                res = this.expr();
-                res = this.expr().concat(res);
-                res.push(Instruction[Instruction.OR]);
+                res = this.compileBinaryOperator();
+                this.push(res, Instruction[Instruction.OR]);
                 break;
             case LexerToken.and:
                 this.compare(LexerToken.and);
-                res = this.expr();
-                res = this.expr().concat(res);
-                res.push(Instruction[Instruction.AND]);
+                res = this.compileBinaryOperator();
+                this.push(res, Instruction[Instruction.AND]);
                 break;
             case LexerToken.car:
                 this.compare(LexerToken.car);
-                res = this.expr();
-                res.push(Instruction[Instruction.CAR]);
+                res = this.compileUnaryOperator();
+                this.push(res, Instruction[Instruction.CAR]);
                 break;
             case LexerToken.cdr:
                 this.compare(LexerToken.cdr);
-                res = this.expr();
-                res.push(Instruction[Instruction.CDR]);
+                res = this.compileUnaryOperator();
+                this.push(res, Instruction[Instruction.CDR]);
                 break;
             case LexerToken.consp:
                 this.compare(LexerToken.consp);
-                res = this.expr();
-                res.push(Instruction[Instruction.CONSP]);
-                break;
-            case LexerToken.backQuote:
-                this.compare(LexerToken.backQuote);
-                this.expr();
-                break;
-            case LexerToken.comma:
-                this.compare(LexerToken.comma);
-                this.expr();
+                res = this.compileUnaryOperator();
+                this.push(res, Instruction[Instruction.CONSP]);
                 break;
             case LexerToken.Iden:
             case LexerToken.leftBracket:
@@ -264,10 +260,10 @@ export class Parser{
         return res;
     }
 
-    private val(): SECDArray {
+    protected val(): SECDArray {
         let res: SECDArray = new SECDArray();
         switch (this.currTok) {
-            case LexerToken.Str:
+            case LexerToken.Str://TODO
                 this.compare(LexerToken.Str);
                 break;
             case LexerToken.Bool:
@@ -284,31 +280,28 @@ export class Parser{
                 break;
             case LexerToken.null:
                 this.compare(LexerToken.null);
-                res.push(Instruction[Instruction.NIL]);
+                this.push(res, Instruction[Instruction.NIL]);
                 break;
             case LexerToken.quote:
-                res.push(Instruction[Instruction.LDC]);
-                res.push(this.lexer.loadQuotedValue());
-                break;
+                res = this.compileQuote();
+                break;/*
             case LexerToken.leftBracket:
                 this.compare(LexerToken.leftBracket);
                 this.val();
-                this.compare(LexerToken.rightBracket);
+                this.compare(LexerToken.rightBracket);*/
         }
         return res;
     }
 
-    private iden(): SECDArray {
+    protected iden(): SECDArray {
         let res: SECDArray = new SECDArray();
-        res.push(Instruction[Instruction.LD]);
-        res.push(this.symbTable.getPos(this.lexer.getCurrString()));
+        this.push(res, Instruction[Instruction.LD]);
+        this.push(res, this.symbTable.getPos(this.lexer.getCurrString()));
         return res;
     }
 
-    private args(): string[]{
-        let res: string[];
-        res = [];
-        let arg: string;
+    protected args(): string[]{
+        let res: string[] = [];
         switch (this.currTok) {
             case LexerToken.rightBracket:
                 break;
@@ -318,8 +311,7 @@ export class Parser{
                 this.args();
                 break;
             case LexerToken.Iden:
-                arg = this.lexer.getCurrString();
-                res = [arg];
+                res = [this.lexer.getCurrString()];
                 this.compare(LexerToken.Iden);
                 res = res.concat(this.args());
                 break;
@@ -327,7 +319,7 @@ export class Parser{
         return res;
     }
 
-    private letBody(): [string[], SECDArray] {
+    protected letBody(): [string[], SECDArray] {
         let res: SECDArray = null;
         let innerArr: SECDArray = new SECDArray();
         let args: Array<string> = [];
@@ -350,7 +342,7 @@ export class Parser{
                 innerArr = innerRes[1];
                 args.push(arg);
                 if(innerArr != null)
-                    res.push(innerArr);
+                    this.push(res, innerArr);
                 break;
             case LexerToken.rightBracket:
                 break;
@@ -358,7 +350,7 @@ export class Parser{
         return [args, res];
     }
 
-    private beginBody(): SECDArray {
+    protected beginBody(): SECDArray {
         let res: SECDArray = null;
         let innerArr: SECDArray = new SECDArray();
         switch (this.currTok){
@@ -375,33 +367,15 @@ export class Parser{
         return res;
     }
 
-    private vals(): SECDArray {
-        let res: SECDArray = new SECDArray();
-        switch (this.currTok) {
-            case LexerToken.leftBracket:
-            case LexerToken.Str:
-            case LexerToken.null:
-            case LexerToken.Iden:
-            case LexerToken.Bool:
-            case LexerToken.Num:
-                this.val();
-                this.vals();
-                break;
-            case LexerToken.rightBracket:
-                break;
-        }
-        return res;
-    }
-
-    private functionArgs(): SECDArray{
+    protected functionArgs(): SECDArray{
         let res: SECDArray = new SECDArray();
         let innerArr: SECDArray;
-        res.push(Instruction[Instruction.NIL]);
+        this.push(res, Instruction[Instruction.NIL]);
         innerArr = this.expr();
         return res.concat(this.funcArgs()).concat(innerArr);
     }
 
-    private funcArgs(): SECDArray {
+    protected funcArgs(): SECDArray {
         let res: SECDArray = new SECDArray();
         switch (this.currTok){
             case LexerToken.leftBracket:
@@ -411,7 +385,7 @@ export class Parser{
             case LexerToken.Bool:
             case LexerToken.Num:
                 res = this.expr();
-                res.push(Instruction[Instruction.CONS]);
+                this.push(res, Instruction[Instruction.CONS]);
                 res = this.funcArgs().concat(res);
                 break;
             case LexerToken.rightBracket:
@@ -420,22 +394,51 @@ export class Parser{
         return res;
     }
 
-    private num(): SECDArray {
+    protected num(): SECDArray {
         let res: SECDArray = new SECDArray();
-        res.push(Instruction[Instruction.LDC]);
-        res.push(this.lexer.getCurrNumber());
+        this.push(res, Instruction[Instruction.LDC]);
+        this.push(res, this.lexer.getCurrNumber());
         return res
     }
 
-    private lambda(args: string[]): SECDArray{
+    protected lambda(args: string[]): SECDArray{
         let res: SECDArray = new SECDArray();
         let innerArray: SECDArray;
         this.symbTable = this.symbTable.push(new SymbTable(args));
-        res.push(Instruction[Instruction.LDF]);
+        this.push(res, Instruction[Instruction.LDF]);
         innerArray = this.expr();
         innerArray.push(Instruction[Instruction.RTN]);
-        res.push(innerArray);
+        this.push(res, innerArray);
         this.symbTable = this.symbTable.pop();
         return res;
     }
+
+    protected compileQuote(){
+        let res: SECDArray = new SECDArray();
+        this.push(res, Instruction[Instruction.LDC]);
+        this.push(res, this.lexer.loadQuotedValue());
+        this.currTok = this.lexer.getNextToken();
+        return res;
+    }
+
+    compileBackQuote(): SECDArray{
+        this.compare(LexerToken.backQuote);
+        return this.compileQuote();
+    }
+
+    compileComma(): SECDArray{
+        //TODO ParserError
+        return undefined;
+    }
+
+    compileUnaryOperator(): SECDArray{
+        return this.expr();
+    }
+
+    compileBinaryOperator(): SECDArray{
+        let res = this.expr();
+        let innerArr = this.expr();
+        return innerArr.concat(res);
+    }
+
 }
