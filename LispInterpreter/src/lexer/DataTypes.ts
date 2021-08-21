@@ -5,5 +5,6 @@ export enum DataType{
     STRING,
     QUOTES,
     SPEC,
-    WHITESPACE
+    WHITESPACE,
+    INVALID
 }

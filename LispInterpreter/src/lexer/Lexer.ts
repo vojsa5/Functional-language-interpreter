@@ -1,9 +1,10 @@
 import {DataType} from "./DataTypes";
 import {LexerToken} from "./LexerTokens";
+import {SECDArray} from "../parser/SECDArray";
 
 export class Lexer{
     inputBuffer: String;
-    lastChar: string | null;
+    lastChar: string;
     currVal: number;
     currIdentifier: string;
 
@@ -11,7 +12,7 @@ export class Lexer{
         this.inputBuffer = input;
     }
 
-    private getNextChar(): string | null{
+    private getNextChar(): string{
         if(this.inputBuffer) {
             const result = this.inputBuffer.charAt(0);
             this.inputBuffer = this.inputBuffer.substring(1);
@@ -20,11 +21,26 @@ export class Lexer{
         return null;
     }
 
-    private loadFirstChar(): string | null{
-        return this.lastChar == null ? this.getNextChar() : this.lastChar;
+    private loadNonWhitespace(): string{
+        let res = this.getNextChar();
+        if(!res)
+            return null;
+        if(Lexer.getDataType(res) == DataType.WHITESPACE)
+            return this.loadNonWhitespace();
+        return res;
+    }
+
+    private loadFirstChar(): string{
+        let dataType = Lexer.getDataType(this.lastChar);
+        if(dataType == DataType.INVALID || dataType == DataType.WHITESPACE )
+            return this.loadNonWhitespace();
+        return this.lastChar;
+        //return Lexer.getDataType(this.lastChar) == ( DataType.INVALID | DataType.WHITESPACE ) ? this.loadNonWhitespace() : this.lastChar;
     }
 
     private static getDataType(char: string): DataType{
+        if(!char)
+            return DataType.INVALID;
         if(char.match(/[0-9]/i))
             return DataType.NUMBER;
         else if(char.match(/[a-z]|[A-Z]/i))
@@ -35,10 +51,10 @@ export class Lexer{
         return DataType.SPEC
     }
 
-    private loadNumber(result: number, validDataType: (dataType: DataType) => boolean): LexerToken{
+    private loadNumber(result: number): LexerToken{
         let currChar = this.getNextChar();
         let currDataType = Lexer.getDataType(currChar);
-        while (validDataType(currDataType)) {
+        while (currDataType == DataType.NUMBER) {
             result = result * 10 + Number(currChar);
             currChar = this.getNextChar();
             currDataType = Lexer.getDataType(currChar);
@@ -68,7 +84,7 @@ export class Lexer{
     private loadIdentifier(result: string): LexerToken{
         let currChar = this.getNextChar();
         let currDataType = Lexer.getDataType(currChar);
-        while (currDataType == ( DataType.NUMBER | DataType.STRING )) {
+        while (currDataType == DataType.NUMBER || currDataType == DataType.STRING ) {
             result += currChar;
             currChar = this.getNextChar();
             currDataType = Lexer.getDataType(currChar);
@@ -78,7 +94,7 @@ export class Lexer{
         return Lexer.loadIdenToken(result);
     }
 
-    private loadString(result: string): LexerToken{
+    /*private loadString(result: string): LexerToken{
         let currChar = this.getNextChar();
         let currDataType = Lexer.getDataType(currChar);
         while (currDataType != DataType.QUOTES)
@@ -86,9 +102,10 @@ export class Lexer{
         this.lastChar = currChar;
         this.currIdentifier = result;
         return LexerToken.Str;
-    }
+    }*/
 
     private loadSpecial(currChar: string): LexerToken{
+        this.currIdentifier = currChar;
         switch (currChar){
             case "+":
                 return LexerToken.plus;
@@ -100,16 +117,20 @@ export class Lexer{
                 return LexerToken.division;
             case "<":
                 currChar = this.getNextChar();
-                if(currChar == "=")
+                if(currChar == "=") {
+                    this.currIdentifier += currChar;
                     return LexerToken.le;
+                }
                 this.lastChar = currChar;
                 return LexerToken.lt;
             case "=":
                 return LexerToken.eq;
             case ">":
                 currChar = this.getNextChar();
-                if(currChar == "=")
+                if(currChar == "=") {
+                    this.currIdentifier += currChar;
                     return LexerToken.he;
+                }
                 this.lastChar = currChar;
                 return LexerToken.ht;
             case "(":
@@ -126,6 +147,7 @@ export class Lexer{
                 return LexerToken.comma;
             case "#":
                 currChar = this.getNextChar();
+                this.currIdentifier += currChar;
                 if(currChar == "t") {
                     this.currVal = 1;
                     return LexerToken.true;
@@ -138,6 +160,49 @@ export class Lexer{
         }
     }
 
+    private loadQuotedSECDList(): SECDArray{
+        let res: SECDArray = new SECDArray();
+        let currChar: string;
+        while(true){
+            currChar = this.loadFirstChar();
+            if(!currChar)
+                return; //TODO Lexer Error
+            switch(currChar){
+                case "(":
+                    res.push(this.loadQuotedSECDList());
+                    break;
+                case ")":
+                    return res;
+                default:
+                    res.push(this.loadQuotedElement(currChar));
+            }
+        }
+    }
+
+    private loadQuotedElement(currChar: string): string{
+        this.lastChar = currChar;
+        this.getNextToken();
+        switch (Lexer.getDataType(currChar)) {
+            case DataType.NUMBER:
+                return this.getCurrNumber().toString();
+            case DataType.STRING:
+            case DataType.SPEC:
+                return this.getCurrString();
+            case DataType.WHITESPACE:
+            //LexerError
+        }
+    }
+
+    public loadQuotedValue(): SECDArray{
+        let currChar = this.loadFirstChar();
+        if(currChar != "(") {
+            let res: SECDArray = new SECDArray();
+            res.push(this.loadQuotedElement(currChar));
+            return res;
+        }
+        return this.loadQuotedSECDList();
+    }
+
     public getNextToken(): LexerToken | null{
         let currChar = this.loadFirstChar();
         let currDataType: DataType;
@@ -147,15 +212,13 @@ export class Lexer{
         currDataType = Lexer.getDataType(currChar);
         switch(currDataType){
             case DataType.NUMBER:
-                return this.loadNumber(Number(currChar), (dataType => dataType == DataType.NUMBER));
-            case DataType.QUOTES:
-                return this.loadString("");
+                return this.loadNumber(Number(currChar));
+            /*case DataType.QUOTES:
+                return this.loadString("");*/
             case DataType.STRING:
                 return this.loadIdentifier(currChar);
             case DataType.SPEC:
                 return this.loadSpecial(currChar);
-            case DataType.WHITESPACE:
-                return this.getNextToken();
         }
     }
 

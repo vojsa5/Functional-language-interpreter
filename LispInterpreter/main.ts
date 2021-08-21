@@ -14,4 +14,5 @@ console.log(parser.parse("(letrec((fact) " +
                                         "(if (= n 0)" +
                                             "1" +
                                             "(* n (fact (- n 1)))))))" +
-                                "(fact 2))"))
+                                "(fact 2))"));
+console.log(parser.parse("'(1 2 3)"));
