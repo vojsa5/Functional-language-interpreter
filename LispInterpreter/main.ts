@@ -17,8 +17,13 @@ console.log(parser.parse("(letrec((fact) " +
                                 "(fact 2))"));
 console.log(parser.parse("'(1 2 3)"));
 
+console.log(parser.parse("(define cadr(lst)" +
+                                        "(car (cdr lst)))" +
+                                "(cadr '(1 2 3))"));
+
 let preprocessor: Preprocessor = new Preprocessor();
-console.log(preprocessor.parse("`(+ ,(if (= 1 2)" +
+console.log(preprocessor.parse("(def-macro macro()" +
+                                        "`(+ ,(if (= 1 2)" +
                                             "`(cdr '(5 2 1))" +
                                             "'(5 2 1)" +
-                                        ") 5)"));
+                                        ") 5))"));

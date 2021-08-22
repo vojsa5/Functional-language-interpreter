@@ -101,6 +101,10 @@ export class Lexer{
                 return LexerToken.cdr;
             case "consp":
                 return LexerToken.consp;
+            case "define":
+                return LexerToken.define;
+            case "def-macro":
+                return LexerToken.defBasicMacro;
             default:
                 return LexerToken.Iden;
         }
@@ -109,7 +113,7 @@ export class Lexer{
     private loadIdentifier(result: string): LexerToken{
         let currChar = this.getNextChar();
         let currDataType = Lexer.getDataType(currChar);
-        while (currDataType == DataType.NUMBER || currDataType == DataType.STRING ) {
+        while (currDataType == DataType.NUMBER || currDataType == DataType.STRING || currChar == "-" || currChar == "_" ) {
             result += currChar;
             currChar = this.getNextChar();
             currDataType = Lexer.getDataType(currChar);
