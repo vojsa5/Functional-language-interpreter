@@ -9,6 +9,7 @@ export enum Instruction{
     MUL,
     DIV,
     EQ,
+    NE,
     LT,
     HT,
     LE,
@@ -26,5 +27,6 @@ export enum Instruction{
     RAP,
     RTN,
     DUM,
+    DEFUN,
     PRINT
 }
