@@ -1,6 +1,9 @@
-import {SECDArray} from "../parser/SECDArray"
-import {Instruction} from "../instructions/Instructions";
+import {SECDArray} from "../utility/SECDArray"
 import {Logger} from "../logger/Logger";
+import {SECDValue} from "../utility/SECDValue";
+import {InstructionShortcut} from "../instructions/InstructionShortcut";
+import {Instruction} from "../instructions/Instruction";
+import {EmptyNode, Node, ValueNode} from "../AST/AST";
 
 
 export class Interpreter{
@@ -51,73 +54,81 @@ export class Interpreter{
     private _dump: SECDArray
     private _environment: SECDArray
 
+    private push(arr: SECDArray, val: number | string | boolean | Instruction, node?: Node): number{
+        if(node == undefined)
+            node = new EmptyNode()
+        return arr.push(new SECDValue(val, node))
+    }
+
     private cloneArray(arr: SECDArray){
         let other = new SECDArray()
         arr.forEach(val => other.push(val))
         return other
     }
 
-    private evaluateUnaryExpression(arr: number | string | boolean | SECDArray, instruction: Instruction) {
+    private evaluateUnaryExpression(arr: SECDValue | SECDArray, instructionShortcut: InstructionShortcut) {
         this.logger.info("evaluating unary expression on target: " + arr)
         //@ts-ignore
-        switch (Instruction[instruction] as Instruction) {
-            case Instruction.CONSP:
-                this.stack.push(Array.isArray(arr))
+        switch (instructionShortcut._shortcut) {
+            case InstructionShortcut.CONSP:
+                this.push(this.stack, Array.isArray(arr))
                 break;
-            case Instruction.CAR:
+            case InstructionShortcut.CAR:
                 if(Array.isArray(arr))
                     this.stack.push(arr.shift())
                 //else Runtime Error
                 break;
-            case Instruction.CDR:
+            case InstructionShortcut.CDR:
                 if(Array.isArray(arr))
                     arr.shift()
                 //else Runtime Error
-                this.stack.push(arr)
+                this.stack.push(<SECDValue> arr)
                 break;
         }
     }
 
-    private evaluateBinaryExpression(num1: number | string | boolean | SECDArray, num2: number | string | boolean | SECDArray, instruction: Instruction) {
-        if(typeof num1 != "number" || typeof num2 != "number")
+    private evaluateBinaryExpression(num1: SECDValue | SECDArray, num2: SECDValue | SECDArray, instructionShortcut: InstructionShortcut) {
+        let val1 = (<SECDValue> num1).val.val
+        let val2 = (<SECDValue> num2).val.val
+        if(typeof val1 != "number" || typeof val2 != "number")
             return//Runtime Error
-        this.logger.info("evaluating binary expression on targets: " + num1 + " and " + num2)
+        this.logger.info("evaluating binary expression on targets: " + val1 + " and " + val2)
         //@ts-ignore
-        switch (Instruction[instruction] as Instruction) {
-            case Instruction.ADD:
-                this.stack.push(num1 + num2)
+        switch (instructionShortcut._shortcut) {
+            case InstructionShortcut.ADD:
+                this.push(this.stack, (val1 + val2), new ValueNode(val1 + val2))
                 break
-            case Instruction.SUB:
-                this.stack.push(num1 - num2)
+            case InstructionShortcut.SUB:
+                this.push(this.stack, (val1 - val2), new ValueNode(val1 - val2))
                 break
-            case Instruction.MUL:
-                this.stack.push(num1 * num2)
+            case InstructionShortcut.MUL:
+                this.push(this.stack, (val1 * val2), new ValueNode(val1 * val2))
                 break
-            case Instruction.DIV:
-                this.stack.push(num1 / num2)
+            case InstructionShortcut.DIV:
+                this.push(this.stack, (val1 / val2), new ValueNode(val1 / val2))
                 break
-            case Instruction.EQ:
-                this.stack.push(num1 == num2)
+            case InstructionShortcut.EQ:
+                this.push(this.stack, (val1 == val2), new ValueNode(val1 == val2))
                 break
-            case Instruction.NE:
-                this.stack.push(num1 != num2)
+            case InstructionShortcut.NE:
+                this.push(this.stack, (val1 != val2), new ValueNode(val1 != val2))
                 break
-            case Instruction.LT:
-                this.stack.push(num1 < num2)
+            case InstructionShortcut.LT:
+                this.push(this.stack, (val1 < val2), new ValueNode(val1 < val2))
                 break
-            case Instruction.LE:
-                this.stack.push(num1 <= num2)
+            case InstructionShortcut.LE:
+                this.push(this.stack, (val1 <= val2), new ValueNode(val1 <= val2))
                 break
-            case Instruction.HT:
-                this.stack.push(num1 > num2)
+            case InstructionShortcut.HT:
+                this.push(this.stack, (val1 > val2), new ValueNode(val1 > val2))
                 break
-            case Instruction.HE:
-                this.stack.push(num1 >= num2)
+            case InstructionShortcut.HE:
+                this.push(this.stack, (val1 >= val2), new ValueNode(val1 >= val2))
                 break
         }
     }
 
-    private evaluateIf(expr: number | string | boolean | SECDArray, branch1: number | string | boolean | SECDArray, branch2: number | string | boolean | SECDArray){
+    private evaluateIf(expr: SECDValue | SECDArray, branch1: SECDValue | SECDArray, branch2: SECDValue | SECDArray){
         if(!Array.isArray(branch1) || !Array.isArray(branch2))
             return //Runtime Error
         this.logger.info("evaluating if with condition " + expr + " with branches: " + branch1 + " and " + branch2)
@@ -138,69 +149,72 @@ export class Interpreter{
 
     public detectAction(){
         let code: SECDArray = this.code
+        console.assert(code instanceof SECDArray)
         if(code.length == 0) {
             console.log(this.stack.pop())
             return
         }
+        let output = code.getNode()
         let tmpArr = new SECDArray()
-        let tmpArr2, instruction
-        instruction = code.shift()
+        let tmpArr2, instructionShortcut
+        instructionShortcut = (<SECDValue> code.shift()).val
         //@ts-ignore
-        switch (Instruction[instruction] as Instruction) {
-            case Instruction.LDC:
-                tmpArr.push(code.shift())
+        switch (instructionShortcut.val._shortcut) {
+            case InstructionShortcut.LDC:
+                instructionShortcut = code.shift()
+                this.push(tmpArr, (<ValueNode> instructionShortcut.val.node).value)
                 this.stack.push(tmpArr[0])
                 break
-            case Instruction.LD:
+            case InstructionShortcut.LD:
                 tmpArr.push(code.shift())
                 tmpArr2 = this.evaluateLoad(tmpArr[0][0], tmpArr[0][1])
                 this.logger.info("loading value: " + tmpArr2)
                 this.stack.push(tmpArr2)
                 break
-            case Instruction.SEL:
+            case InstructionShortcut.SEL:
                 this.evaluateIf(this.stack.pop(), code.shift(), code.shift())
                 break
-            case Instruction.JOIN:
+            case InstructionShortcut.JOIN:
                 tmpArr2 = this.dump.pop()
                 this._code = tmpArr2
                 break
-            case Instruction.NIL:
+            case InstructionShortcut.NIL:
                 //this.logger.info("loading empty list")
                 this.stack.push(new SECDArray())
                 break
-            case Instruction.DUM:
+            case InstructionShortcut.DUM:
                 this.environment.push(new SECDArray())
                 break
-            case Instruction.CONSP:
-            case Instruction.CAR:
-            case Instruction.CDR:
-                this.evaluateUnaryExpression(this.stack.pop(), instruction)
+            case InstructionShortcut.CONSP:
+            case InstructionShortcut.CAR:
+            case InstructionShortcut.CDR:
+                this.evaluateUnaryExpression(this.stack.pop(), instructionShortcut.val)
                 break
-            case Instruction.ADD:
-            case Instruction.SUB:
-            case Instruction.MUL:
-            case Instruction.DIV:
-            case Instruction.EQ:
-            case Instruction.NE:
-            case Instruction.LT:
-            case Instruction.LE:
-            case Instruction.HT:
-            case Instruction.HE:
-                this.evaluateBinaryExpression(this.stack.pop(), this.stack.pop(), instruction)
+            case InstructionShortcut.ADD:
+            case InstructionShortcut.SUB:
+            case InstructionShortcut.MUL:
+            case InstructionShortcut.DIV:
+            case InstructionShortcut.EQ:
+            case InstructionShortcut.NE:
+            case InstructionShortcut.LT:
+            case InstructionShortcut.LE:
+            case InstructionShortcut.HT:
+            case InstructionShortcut.HE:
+                this.evaluateBinaryExpression(this.stack.pop(), this.stack.pop(), instructionShortcut.val)
                 break
-            case Instruction.CONS:
+            case InstructionShortcut.CONS:
                 tmpArr.push(this.stack.pop())
                 tmpArr2 = this.stack.pop()
                 tmpArr2.push(tmpArr.pop())
                 this.stack.push(tmpArr2)
                 break
-            case Instruction.LDF:
+            case InstructionShortcut.LDF:
                 tmpArr.push(this.code.shift())
                 tmpArr.push(this.environment)
                 this.logger.info("loading function: " + tmpArr[0]  /*+ " in environment: " + tmpArr[1]*/)
                 this.stack.push(tmpArr)
                 break
-            case Instruction.AP:
+            case InstructionShortcut.AP:
                 tmpArr.push(this.stack.pop())
                 tmpArr.push(this.stack.pop())
                 this.dump.push(this.cloneArray(this.stack))
@@ -212,7 +226,7 @@ export class Interpreter{
                 this.stack.length = 0
                 this.logger.info("Applying function: " + this.code + " with arguments: " + this.environment + "")
                 break
-            case Instruction.RAP:
+            case InstructionShortcut.RAP:
                 tmpArr.push(this.stack.pop())
                 tmpArr.push(this.stack.pop())
                 this._environment[this.environment.length - 1] = tmpArr[1]
@@ -225,24 +239,25 @@ export class Interpreter{
                 this.stack.length = 0
                 this.logger.info("Applying recursive function: " + this.code + " with arguments: " + this.environment + "")
                 break
-            case Instruction.RTN:
+            case InstructionShortcut.RTN:
                 tmpArr.push(this.stack.pop())
                 this.stack       = new SECDArray()
                 this.environment = new SECDArray()
                 this.code        = new SECDArray()
-                this.environment = this.environment.concat(this.dump.pop())
-                this.code        = this.code.concat(this.dump.pop())
-                this.stack       = this.stack.concat(this.dump.pop())
+                this.environment = this.environment.concat(<SECDArray> this.dump.pop())
+                this.code        = this.code.concat(<SECDArray> this.dump.pop())
+                this.stack       = this.stack.concat(<SECDArray> this.dump.pop())
                 this.stack.push(tmpArr[0])
                 this.logger.info("Returning from function, result: " + tmpArr[0])
                 break
-            case Instruction.DEFUN:
+            case InstructionShortcut.DEFUN:
                 if(Array.isArray(this.environment[0]))
                     this.environment[0].push(this.stack.pop())
                 //else Runtime Error
                 break
             default:
                 console.log("error")
+                //Runtime Error
         }
         this.detectAction()
     }

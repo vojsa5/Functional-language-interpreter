@@ -1,5 +1,5 @@
-import {Parser} from "../parser/Parser";
-import {SECDArray} from "../parser/SECDArray";
+/*import {Parser} from "../parser/Parser";
+import {SECDArray} from "../utility/SECDArray";
 import {LexerToken} from "../lexer/LexerTokens";
 
 
@@ -46,4 +46,4 @@ export class Preprocessor extends Parser{
         return res;
     }
 
-}
+}*/

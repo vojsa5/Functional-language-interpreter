@@ -1,47 +1,53 @@
-import {SECDArray} from "./SECDArray";
+import {SECDArray} from "../utility/SECDArray"
+import {EmptyNode} from "../AST/AST";
+import {SECDValue} from "../utility/SECDValue";
 
 
 export class SymbTable{
-    symbols: Array<string>;
-    prev: SymbTable;
+    symbols: Array<string>
+    prev: SymbTable
 
     constructor(args: string[]) {
-        this.symbols = args;
+        this.symbols = args
     }
 
     push(other: SymbTable): SymbTable{
-        other.prev = this;
-        return other;
+        other.prev = this
+        return other
     }
 
     pop(): SymbTable{
-        return this.prev;
+        return this.prev
     }
 
     add(val: string){
-        this.symbols.push(val);
+        this.symbols.push(val)
+    }
+    
+    addFront(val: string){
+        this.symbols.unshift(val)
     }
 
     rem(val: string){
-        this.symbols.filter(symbol => symbol != val);
+        this.symbols.filter(symbol => symbol != val)
     }
 
     getPos(val: string): SECDArray{
-        let res: SECDArray;
-        res = new SECDArray();
-        let numbers = this.getPosInner(val, 0);
-        res.push(numbers[0]);
-        res.push(numbers[1]);
-        return res;
+        let res: SECDArray
+        res = new SECDArray()
+        let numbers = this.getPosInner(val, 0)
+        res.push(new SECDValue(numbers[0], new EmptyNode()))
+        res.push(new SECDValue(numbers[1], new EmptyNode()))
+        return res
     }
 
     private getPosInner(val: string, cnt: number): [number, number]{
-        let res = this.symbols.findIndex(symbol => symbol == val);
+        let res = this.symbols.findIndex(symbol => symbol == val)
         if(res < 0){
             if(this.prev)
-                return this.prev.getPosInner(val, cnt + 1);
-            return null;
+                return this.prev.getPosInner(val, cnt + 1)
+            return null
         }
-        return [cnt, res];
+        return [cnt, res]
     }
 }

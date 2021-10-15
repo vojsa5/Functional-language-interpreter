@@ -1,5 +1,6 @@
 
-export enum Instruction{
+
+export enum InstructionShortcut{
     NIL,
     LD,
     LDC,
@@ -28,5 +29,6 @@ export enum Instruction{
     RTN,
     DUM,
     DEFUN,
-    PRINT
+    PRINT,
+    DAP
 }
