@@ -1,9 +1,10 @@
-import {SECDArray} from "./SECDArray";
+import {SECDArray} from "../utility/SECD/SECDArray"
+import { SECDValue } from "../utility/SECD/SECDValue";
 
 
 export class SymbTable{
     symbols: Array<string>;
-    prev: SymbTable;
+    prev!: SymbTable;
 
     constructor(args: string[]) {
         this.symbols = args;
@@ -22,6 +23,10 @@ export class SymbTable{
         this.symbols.push(val);
     }
 
+    addFront(val: string){
+        this.symbols.unshift(val)
+    }
+
     rem(val: string){
         this.symbols.filter(symbol => symbol != val);
     }
@@ -30,8 +35,8 @@ export class SymbTable{
         let res: SECDArray;
         res = new SECDArray();
         let numbers = this.getPosInner(val, 0);
-        res.push(numbers[0]);
-        res.push(numbers[1]);
+        res.push(new SECDValue(numbers[0]));
+        res.push(new SECDValue(numbers[1]));
         return res;
     }
 
@@ -40,7 +45,7 @@ export class SymbTable{
         if(res < 0){
             if(this.prev)
                 return this.prev.getPosInner(val, cnt + 1);
-            return null;
+            return [-1, -1];
         }
         return [cnt, res];
     }
